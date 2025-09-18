@@ -103,9 +103,6 @@ Setting up Keycloak is the easy part. Now we need to configure it to act as an a
 
 
 
-Now, when you add a user to the `security_` group, which Wazuh will use to grant them permissions.
-
-
 
 
 
@@ -116,7 +113,7 @@ Now, when you add a user to the `security_` group, which Wazuh will use to grant
 ## Step 3: Configuring Wazuh to Use Keycloak
 
 
-We need to make 3 stepo to make wazuh wotk withj keycloak
+We need to make 3 steps to make wazuh wotk with keycloak
 
 1. Setup the dashbouard so it used keycloak and send you to login at the righ place
 2. Setup the indexer so it gets the user from keycloak and can map the roles and more

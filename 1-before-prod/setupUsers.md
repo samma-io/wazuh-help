@@ -94,32 +94,38 @@ Setting up Keycloak is the easy part. Now we need to configure it to act as an a
 
 1.  **Create a Client**: In the Keycloak admin console, create a new client for Wazuh. Let's call the **Client ID** `wazuh`. Ensure the client has **Standard flow** enabled and add your Wazuh dashboard URL to the **Valid Redirect URIs** (e.g., `https://your-wazuh-host.com/*`).
 
-2.  **Create Realm Roles**: We need roles that will correspond to permissions in Wazuh. Go to **Realm Roles** and create two roles:
 
-      * `wazuh_admin`
-      * `wazuh_user`
+3.  **Create Groups**: Using groups is the best way to manage user permissions. Go to **Groups** and create groups that mirror the roles:
 
-3.  **Create Groups**: Using groups is the best way to manage user permissions. Go to **Groups** and create two groups that mirror the roles:
+      * `security_analytics_full_access`
+      * `security_analytics_read_access`
+      * `admin`  THIS WILL NEED TO GO ON THJE FIRTS USER TO WORK 
 
-      * `wazuh_admins`
-      * `wazuh_users`
 
-4.  **Map Roles to Groups**: This is the crucial step.
 
-      * Click on the `wazuh_admins` group.
-      * Go to the **Role Mappings** tab.
-      * Assign the `wazuh_admin` realm role to this group.
-      * Repeat the process for the `wazuh_users` group, assigning it the `wazuh_user` role.
+Now, when you add a user to the `security_` group, which Wazuh will use to grant them permissions.
 
-Now, when you add a user to the `wazuh_admins` group, they will automatically inherit the `wazuh_admin` role, which Wazuh will use to grant them permissions.
 
-> **Shortcut**: To make this easier, I have exported my Keycloak realm setup. You can download the `realm-export.json` file from [this GitHub repository](https://www.google.com/search?q=https://github.com/example/repo) and import it into your Keycloak instance.
+
+
+
+> **Shortcut**: To make this easier, I have exported my Keycloak realm setup. You can download the `wazuh-keycloak.json` file and import it into your Keycloak instance.
 
 -----
 
 ## Step 3: Configuring Wazuh to Use Keycloak
 
+
+We need to make 3 stepo to make wazuh wotk withj keycloak
+
+1. Setup the dashbouard so it used keycloak and send you to login at the righ place
+2. Setup the indexer so it gets the user from keycloak and can map the roles and more
+3. Run a tool called secureadmin to update the index in opensearch with the settings (This will be depricade )
+
 It's time to tell Wazuh to use Keycloak for authentication. This is done by editing the OpenSearch Dashboards configuration file.
+
+
+### Dashboard
 
 SSH into your Wazuh server and edit `/etc/wazuh-dashboard/opensearch_dashboards.yml`. Find the `opensearch_security.auth.type: "basicauth"` line and replace it with the OpenID configuration below.
 
@@ -134,9 +140,6 @@ opensearch_security.openid:
   client_id: "wazuh"
   client_secret: "YOUR_CLIENT_SECRET_FROM_KEYCLOAK" # Find this in your 'wazuh' client credentials tab
   scope: "openid profile email"
-  header: "Authorization"
-  subject_key: "preferred_username" # Tells Wazuh to use the Keycloak username
-  roles_key: "roles" # Tells Wazuh to look for the 'roles' claim in the token
 ```
 
   * Update the `connect_url` to point to your Keycloak server's IP or hostname.
@@ -150,18 +153,61 @@ systemctl restart wazuh-dashboard
 
 -----
 
-## Step 4: Mapping Roles in the Wazuh Dashboard
+### Indexer 
 
-The final step is to tell Wazuh what permissions the `wazuh_admin` and `wazuh_user` roles from Keycloak should have.
 
-1.  Log into your Wazuh dashboard using your old local admin account.
-2.  Navigate to the menu icon **☰ \> Security \> Roles**.
-3.  Click on the `all_access` role.
-4.  Go to the **Mapped users** tab.
-5.  Under **Backend roles**, add `wazuh_admin`. This maps anyone with the Keycloak `wazuh_admin` role to Wazuh's super-admin role.
-6.  Click **Map**. You can create more granular roles for your `wazuh_user` group as needed.
+Open the file config.yml in opensearch-security and add the settings for the openid. You also need to update the settings for basic_internal_auth_domain
 
-Now, when a user from your `wazuh_admins` group in Keycloak logs into Wazuh, they will be granted full administrative access.
+```yaml
+      config:
+        dynamic:
+          http:
+            anonymous_auth_enabled: false
+            xff:
+              enabled: false
+              internalProxies: '192\.168\.0\.10|192\.168\.0\.11' # regex pattern
+
+          authc:
+            basic_internal_auth_domain:
+              description: "Authenticate via HTTP Basic against internal users database"
+              http_enabled: true
+              transport_enabled: true
+              order: 0
+              http_authenticator:
+                type: basic
+                challenge: false
+              authentication_backend:
+                type: intern
+            openid_auth_domain:
+                http_enabled: true
+                transport_enabled: true
+                order: 1
+                http_authenticator:
+                    type: openid
+                    challenge: true
+                    config:
+                      subject_key: preferred_username
+                      roles_key: groups
+                      openid_connect_url: http://auth.socomp.se/realms/master/.well-known/openid-configuration
+                      required_audience: wazuh
+                authentication_backend:
+                  type: noop
+```
+
+
+Run the command on the indexer to poplate the index.
+Im running in docker containers so plase modifi the path to cert and you configt to map your settings
+
+
+```bash
+export JAVA_HOME=/usr/share/wazuh-indexer/jdk/ && bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh -f /usr/share/wazuh-indexer/opensearch-security/config.yml -icl -key /usr/share/wazuh-indexer/certs/admin-key.pem -cert /usr/share/wazuh-indexer/certs/admin.pem -cacert /usr/share/wazuh-indexer/certs/root-ca.pem -h 127.0.0.1 -nhnv
+```
+
+
+
+
+
+
 
 -----
 
@@ -176,8 +222,40 @@ You can verify the token directly in Keycloak:
 3.  Select a user you've placed in a `wazuh_` group.
 4.  Click **Evaluate** and inspect the **Generated Access Token**. In the decoded token, you should see a `roles` array containing either `wazuh_admin` or `wazuh_user`. If it's not there, your group-to-role mapping is incorrect.
 
+
+
+This is the user tokken I use with the groups in 
+
+```
+{
+  "sub": "0a11ca94-142f-4bb5-b056-8b0e65696126",
+  "email_verified": true,
+  "groups": [
+    "wazuh_admin",
+    "default-roles-master",
+    "offline_access",
+    "uma_authorization",
+    "security_analytics_full_access"
+  ],
+  "preferred_username": "matte45",
+  "email": "matte45@gmail.com"
+}
+
+```
+
+
 -----
+
+
+## k8s
+I run my wazuh in k8s and in the repo you will find the configmaps im using to have this running in k8s
+
 
 ## A Quick Note on Production Security 🔒
 
 The Docker Compose and Wazuh configurations in this guide use **HTTP** for simplicity. **In a production environment, you must configure proper TLS/HTTPS for both Keycloak and Wazuh.** Exposing your authentication system over an unencrypted channel is a major security risk.
+
+## Ref
+
+https://documentation.wazuh.com/current/user-manual/user-administration/single-sign-on/administrator/keycloak.html
+https://docs.opensearch.org/latest/security/authentication-backends/openid-connect/

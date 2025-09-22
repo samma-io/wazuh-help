@@ -12,6 +12,20 @@ Connecting Keycloak to Wazuh accomplishes two key goals:
 
 -----
 
+## flow
+notice the default wazuh login is replaced with keycloak direct
+
+
+
+![Alt Text](keycloak.gif)
+
+
+
+
+
+
+
+
 ## Step 1: Deploying Keycloak with Docker Compose
 
 There are many ways to set up Keycloak, including Helm charts for Kubernetes. For this guide, we'll use a simple `docker-compose` file to get a server running quickly. This setup includes a PostgreSQL database for persistence.
@@ -99,7 +113,7 @@ Setting up Keycloak is the easy part. Now we need to configure it to act as an a
 
       * `security_analytics_full_access`
       * `security_analytics_read_access`
-      * `admin`  THIS WILL NEED TO GO ON THJE FIRTS USER TO WORK 
+      * `admin`  This groups are already in Keycloak and adding user to it will make them Admin in wazzu. Start be using you admin account in keycloak to login to wazuh 
 
 
 
@@ -113,7 +127,7 @@ Setting up Keycloak is the easy part. Now we need to configure it to act as an a
 ## Step 3: Configuring Wazuh to Use Keycloak
 
 
-We need to make 3 steps to make wazuh wotk with keycloak
+We need to make 3 steps to make wazuh work with keycloak
 
 1. Setup the dashbouard so it used keycloak and send you to login at the righ place
 2. Setup the indexer so it gets the user from keycloak and can map the roles and more
@@ -124,7 +138,7 @@ It's time to tell Wazuh to use Keycloak for authentication. This is done by edit
 
 ### Dashboard
 
-SSH into your Wazuh server and edit `/etc/wazuh-dashboard/opensearch_dashboards.yml`. Find the `opensearch_security.auth.type: "basicauth"` line and replace it with the OpenID configuration below.
+SSH into your Wazuh server and edit `/etc/wazuh-dashboard/opensearch_dashboards.yml`.
 
 > **Important**: Before editing, make a backup of this file\!
 > `cp /etc/wazuh-dashboard/opensearch_dashboards.yml /etc/wazuh-dashboard/opensearch_dashboards.yml.bak`
@@ -185,7 +199,7 @@ Open the file config.yml in opensearch-security and add the settings for the ope
                     config:
                       subject_key: preferred_username
                       roles_key: groups
-                      openid_connect_url: http://auth.socomp.se/realms/master/.well-known/openid-configuration
+                      openid_connect_url: http://YOUR_KEYCLOAK_IP:8080/realms/master/.well-known/openid-configuration
                       required_audience: wazuh
                 authentication_backend:
                   type: noop
@@ -210,18 +224,18 @@ export JAVA_HOME=/usr/share/wazuh-indexer/jdk/ && bash /usr/share/wazuh-indexer/
 
 ## Troubleshooting Tips
 
-The most common issue is a misconfiguration in the JWT token. If the roles aren't being passed correctly, the mapping will fail.
+The most common issue is a misconfiguration in the JWT token. If the groups aren't being passed correctly, the mapping will fail.
 
 You can verify the token directly in Keycloak:
 
 1.  Go to **Clients \> `wazuh` \> Client Scopes**.
 2.  Click on the **Evaluate** tab.
 3.  Select a user you've placed in a `wazuh_` group.
-4.  Click **Evaluate** and inspect the **Generated Access Token**. In the decoded token, you should see a `roles` array containing either `wazuh_admin` or `wazuh_user`. If it's not there, your group-to-role mapping is incorrect.
+4.  Click **Evaluate** and inspect the **Generated Access Token**. In the decoded token, you should see a `groups` array containing either `wazuh_admin` or `wazuh_user`. If it's not there, your group-to-role mapping is incorrect.
 
 
 
-This is the user tokken I use with the groups in 
+This is my user token that are used
 
 ```
 {
@@ -233,6 +247,7 @@ This is the user tokken I use with the groups in
     "offline_access",
     "uma_authorization",
     "security_analytics_full_access"
+    "admin"
   ],
   "preferred_username": "matte45",
   "email": "matte45@gmail.com"
@@ -245,7 +260,8 @@ This is the user tokken I use with the groups in
 
 
 ## k8s
-I run my wazuh in k8s and in the repo you will find the configmaps im using to have this running in k8s
+I run my wazuh in k8s and in the repo you will find the configmaps im using to have this running in k8s.
+I also have a helm deploy form wazuh and kubernetes to us.
 
 
 ## A Quick Note on Production Security 🔒

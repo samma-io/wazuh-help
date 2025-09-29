@@ -129,7 +129,7 @@ Setting up Keycloak is the easy part. Now we need to configure it to act as an a
 
 We need to make 3 steps to make wazuh work with keycloak
 
-1. Setup the dashbouard so it used keycloak and send you to login at the righ place
+1. Setup the dashboard so it used keycloak and send you to login at the righ place
 2. Setup the indexer so it gets the user from keycloak and can map the roles and more
 3. Run a tool called secureadmin to update the index in opensearch with the settings (This will be depricade )
 

@@ -27,4 +27,6 @@ To solve this, I’ve been building my own agent containers designed specificall
 
 I simply provide the container with my Wazuh endpoints and an authentication token at launch. From there, the agent takes over. At startup, it automatically generates its own unique name, builds its configuration, registers itself with the Wazuh manager, and immediately starts sending logs. This allows me to deploy agents in large numbers, knowing each one will connect itself and start sending data without any manual intervention.
 
+
+
 Running Wazuh agents in Docker isn't just a neat trick; it's a fundamental shift. It solves real-world dependency problems, dramatically increases flexibility, and unlocks the kind of mass automation that modern infrastructure demands.
